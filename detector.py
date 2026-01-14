@@ -25,6 +25,7 @@ def calibrate():
 
     delta_vols = []
     delta_prices = []
+    delta_spreads = []
 
     # Store the last 10 markets (stores up to 10 seconds ago)
     history = fetch_past_markets(10)
@@ -40,6 +41,7 @@ def calibrate():
 
         delta_vols.append(curr_market['delta_vol'])
         delta_prices.append(curr_market['delta_price'])
+        delta_spreads.append(curr_market['delta_spread'])
 
         history.pop(0)
         history.append(curr_market)
@@ -47,6 +49,7 @@ def calibrate():
     # Convert lists into np arrays for analysis
     delta_vols = np.array(delta_vols)
     delta_prices = np.array(delta_prices)
+    delta_spreads = np.array(delta_spreads)
 
     # Computes percentiles of parameters to determine how much change is "large" or "small"
     # Modify percentiles to determine conservativeness of bot
@@ -54,6 +57,9 @@ def calibrate():
     thresholds = {
         "vol_low": max(1, int(np.percentile(delta_vols, 25))),
         "vol_high": max(5, int(np.percentile(delta_vols, 75))),
+
+        "spread_low": min(-2, int(np.percentile(delta_spreads, 25))),
+        "spread_high": max(2, int(np.percentile(delta_spreads, 75))),
 
         "price_high": max(2, int(np.percentile(delta_prices, 95))),
     }
@@ -100,10 +106,10 @@ def main():
             elif curr_market['delta_vol'] >= thresholds["vol_high"]:
                 beta += 1
             # Spread widening during the jump suggests makers pulled liquidity -> alpha++
-            if curr_market['delta_spread'] >= 2:
+            if curr_market['delta_spread'] >= thresholds['spread_high']:
                 alpha += 1
             # Spread tightening during the jump suggests healthy liquidity -> beta++
-            elif curr_market['delta_spread'] <= -2:
+            elif curr_market['delta_spread'] <= thresholds['spread_low']:
                 beta += 1
 
             print("JUMP",
