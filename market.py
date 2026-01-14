@@ -4,7 +4,7 @@ def fetch_market(ticker, prev_market=None):
     """
     Returns the market data for a ticker.
     Computes the spread.
-    Computes the change in volume, spread, and pct change in price if given a previous market.
+    Computes the change in volume, spread, and change in price if given a previous market.
 
     :param ticker:
     :param prev_market:
@@ -27,7 +27,7 @@ def fetch_market(ticker, prev_market=None):
         market['delta_spread'] = market['yes_spread'] - prev_market['yes_spread']
 
         # change in price, convert to cents
-        market['delta_price'] = int(round(100*(float(market['last_price_dollars']) - float(prev_market['last_price_dollars']))))
+        market['delta_price'] = int(round(100*(float(market['yes_bid_dollars']) - float(prev_market['yes_bid_dollars']))))
 
     return market
 
