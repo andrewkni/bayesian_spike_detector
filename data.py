@@ -4,9 +4,6 @@ Market Logger for backtesting
 This script logs a list of Kalshi market tickers ~every second and appends
 timestamped market parameters to a CSV file for every ticker
 
-Change all_markets in main() to select which markets to log
-Change start and end times if needed
-
 """
 
 from datetime import datetime
@@ -15,12 +12,12 @@ from detector import fetch_past_markets
 import csv
 import time
 
-def log_markets(markets):
+def log_markets(markets, start_hour, start_minute, end_hour, end_minute):
     # Wait until start time
     print("Waiting until start time...")
     while True:
         now = datetime.now()
-        if now.hour == 13 and now.minute == 48:
+        if now.hour == start_hour and now.minute == start_minute:
             break
         time.sleep(30)
 
@@ -47,7 +44,7 @@ def log_markets(markets):
         now = datetime.now()
 
         # stop condition
-        if now.hour == 13 and now.minute >= 50:
+        if now.hour == end_hour and now.minute >= end_minute:
             break
 
         loop_start = time.time()
@@ -80,12 +77,24 @@ def log_markets(markets):
         f.close()
 
 def main():
-    all_markets = [
-        "KXAFCONGAME-26JAN14NGRMAR-TIE",
-        "KXAFCONGAME-26JAN14NGRMAR-MAR",
-        "KXAFCONGAME-26JAN14NGRMAR-NGR",
-    ]
-    log_markets(all_markets)
+    print("Welcome to the market logger program!")
+
+    all_markets = []
+
+    file = ""
+    while file != "e":
+        file = input("Enter market ticker (input \"e\" to exit): ")
+        all_markets.append(file)
+
+    all_markets.remove("e")
+
+    start_hour = int(input("Enter start hour: "))
+    start_minute = int(input("Enter start minute: "))
+
+    end_hour = int(input("Enter end hour: "))
+    end_minute = int(input("Enter end minute: "))
+
+    log_markets(all_markets, start_hour, start_minute, end_hour, end_minute)
 
 if __name__ == "__main__":
     main()
