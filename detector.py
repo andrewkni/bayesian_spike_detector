@@ -1,9 +1,10 @@
 from market import *
+from datetime import datetime
 import numpy as np
 import time
 
 # Input market ticker here
-ticker = "KXWTAMATCH-26JAN13MARBON-MAR"
+ticker = "KXAFCONGAME-26JAN14SENEGY-SEN"
 
 # Calibrate parameter thresholds of the bot
 # EX: a "large" delta_vol differs by market, so you need to define what is "large"
@@ -13,18 +14,29 @@ def calibrate():
     delta_vols = []
     delta_prices = []
 
+    # Store the last 10 markets (stores up to 10 seconds ago)
+    history = []
     prev_market = fetch_market(ticker)
+    for i in range(10):
+        time.sleep(1)
+        curr_market = fetch_market(ticker, prev_market)
+        history.append(curr_market)
+        prev_market = curr_market
+
     init_time = time.time()
 
     # Collects parameter values over time period
     while time.time() < duration + init_time:
         time.sleep(1)
-        curr_market = fetch_market(ticker, prev_market)
+
+        # computes delta vol, price, etc. from curr to market 10 seconds ago
+        curr_market = fetch_market(ticker, history[0])
 
         delta_vols.append(curr_market['delta_vol'])
         delta_prices.append(curr_market['delta_price'])
 
-        prev_market = curr_market
+        history.pop(0)
+        history.append(curr_market)
 
     # Convert lists into np arrays for analysis
     delta_vols = np.array(delta_vols)
@@ -46,20 +58,32 @@ def main():
     alpha = 1 # evidence that move is a fake spike
     beta = 2 # evidence that move is a real repricing
 
+    # Bayesian confidence that the current market move is a “fake spike”
+    mu = alpha / (alpha + beta)
+
     print("Calibrating model...")
     # Calibrate model first
     thresholds = calibrate()
     print(thresholds)
     print("Calibration success!")
 
+    # Store the last 10 markets (stores up to 10 seconds ago)
+    history = []
+    prev_market = fetch_market(ticker)
+    for i in range(10):
+        time.sleep(1)
+        curr_market = fetch_market(ticker, prev_market)
+        history.append(curr_market)
+        prev_market = curr_market
 
     print("Trading commencing...")
 
     # Alpha/beta updates
-    prev_market = fetch_market(ticker)
     while True:
         time.sleep(1)
-        curr_market = fetch_market(ticker, prev_market)
+
+        # compares current market to market 10 seconds ago
+        curr_market = fetch_market(ticker, history[0])
 
         # If the YES price moved up by at least “jump” threshold,
         # classify whether the move looks like a fake spike (alpha) or a real repricing (beta)
@@ -83,15 +107,24 @@ def main():
                   "Δspr", curr_market["delta_spread"],
                   "alpha", alpha, "beta", beta)
 
-        # Bayesian confidence that the current market move is a “fake spike”
-        mu = alpha / (alpha + beta)
+            mu = alpha / (alpha + beta)
+            print("mu", mu)
 
-        print(mu)
         if mu > 0.6:
             print("spike predicted. buy now!")
+            date = datetime.fromtimestamp(time.time())
+            print(date)
+
+            # Reset alpha and beta values
+            alpha = 1
+            beta = 2
+
+            # spike cooldown
+            time.sleep(10)
 
 
-        prev_market = curr_market
+        history.pop(0)
+        history.append(curr_market)
 
 
 if __name__ == '__main__':
