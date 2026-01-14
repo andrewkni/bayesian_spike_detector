@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 # Edit these two parameters for your backtest
-file = "KXAFCONGAME-26JAN14NGRMAR-TIE.csv"
+file = input("Input csv file: ")
 duration = 30  # calibration duration in seconds
 
 df = pd.read_csv(file)
@@ -21,8 +21,6 @@ def fetch_market():
     global row
     parameters = df.iloc[row]
     row += 1
-
-    print(row)
 
     return parameters
 
@@ -53,8 +51,8 @@ def calibrate():
         "vol_low": max(1, int(np.percentile(delta_vols, 25))),
         "vol_high": max(5, int(np.percentile(delta_vols, 75))),
 
-        "spread_low": min(-2, int(np.percentile(delta_spreads, 25))),
-        "spread_high": max(2, int(np.percentile(delta_spreads, 75))),
+        "spread_low": min(-1, int(np.percentile(delta_spreads, 25))),
+        "spread_high": max(1, int(np.percentile(delta_spreads, 75))),
 
         "price_high": max(2, int(np.percentile(delta_prices, 95))),
     }
@@ -79,7 +77,8 @@ def detect():
     print("Trading commencing...")
 
     # Alpha/beta updates, run until end of csv
-    for i in range(len(df) - duration):
+    global row
+    while row < len(df):
         # compares current market to market 10 seconds ago
         curr_market = fetch_market()
 
@@ -129,7 +128,6 @@ def detect():
                 mu = alpha / (alpha + beta)
 
                 # spike cooldown, skip 15 lines in csv
-                global row
                 row += 15
 
 def main():
