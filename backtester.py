@@ -11,7 +11,7 @@ import pandas as pd
 
 # Edit these two parameters for your backtest
 file = input("Input csv file: ")
-duration = 30  # calibration duration in seconds
+duration = 60  # calibration duration in seconds
 
 df = pd.read_csv(file)
 row = 0
@@ -42,19 +42,42 @@ def calibrate():
     # Convert lists into np arrays for analysis
     delta_vols = np.array(delta_vols)
     delta_prices = np.array(delta_prices)
-    delta_spreads = np.array(delta_spreads)
+    delta_spreads = np.abs(np.array(delta_spreads))
 
     # Computes percentiles of parameters to determine how much change is "large" or "small"
     # Modify percentiles to determine conservativeness of bot
     # default values ensure bot works in extreme markets (such as when vol = 0 for long times)
+
+    # Compute vol thresholds with all vol that is not 0 (cuz 0 is no evidence)
+    delta_vols_nonzero = delta_vols[delta_vols > 0]
+    if len(delta_vols_nonzero) == 0:
+        vol_low, vol_high = 1, 5
+    else:
+        vol_low = max(1, int(np.percentile(delta_vols_nonzero, 25)))
+        vol_high = max(vol_low + 1, int(np.percentile(delta_vols_nonzero, 75)))
+
+    # Compute spread thresholds with all spread that is not 0 (cuz 0 is no evidence)
+    delta_spreads_nonzero = delta_spreads[delta_spreads > 0]
+    if len(delta_spreads_nonzero) == 0:
+        spread_thresh = 2  # spread thresh is by default 2 if there is no spread activity
+    else:
+        spread_thresh = int(np.percentile(delta_spreads_nonzero, 80))
+        spread_thresh = max(1, spread_thresh)
+
+    # Compute price threshold with all delta price that is not 0
+    delta_prices_nonzero = delta_prices[delta_prices > 0]
+    if len(delta_prices_nonzero) == 0:
+        price_high = 2
+    else:
+        price_high = max(2, int(np.percentile(delta_prices_nonzero, 99.5)))
+
     thresholds = {
-        "vol_low": max(1, int(np.percentile(delta_vols, 25))),
-        "vol_high": max(5, int(np.percentile(delta_vols, 75))),
+        "vol_low": vol_low,
+        "vol_high": vol_high,
 
-        "spread_low": min(-1, int(np.percentile(delta_spreads, 25))),
-        "spread_high": max(1, int(np.percentile(delta_spreads, 75))),
+        "spread_thresh": spread_thresh,
 
-        "price_high": max(2, int(np.percentile(delta_prices, 95))),
+        "price_high": price_high,
     }
 
     return thresholds
@@ -85,30 +108,42 @@ def detect():
         alpha = max(1.0, alpha * 0.99)  # Very slow decay of evidence over time
         beta = max(2.0, beta * 0.99)
 
-        # If the YES price moved up by at least “jump” threshold,
+        # If the YES price moved up by at least "jump" threshold,
         # classify whether the move looks like a fake spike (alpha) or a real repricing (beta)
         if curr_market['delta_price'] >= thresholds['price_high']:
             # Deprioritize old evidence
             alpha = max(1.0, alpha * decay)
             beta  = max(2.0, beta * decay)
 
+            if curr_market["delta_vol"] == 0:
+                # only blame "fake spike" if liquidity actually pulls
+                if curr_market["delta_spread"] >= thresholds["spread_thresh"]:
+                    alpha += 1
+                # if spread tightens with no prints, treat it as tiny beta
+                elif curr_market["delta_spread"] <= -thresholds["spread_thresh"]:
+                    beta += 0.25
+                # otherwise no evidence
+
             # Low volume on a jump suggests a hype spike -> alpha++
-            if curr_market['delta_vol'] <= thresholds['vol_low']:
+            elif curr_market['delta_vol'] <= thresholds['vol_low']:
                 alpha += 1
             # High volume on a jump suggests broad participation -> beta++
             elif curr_market['delta_vol'] >= thresholds["vol_high"]:
+                beta += 1 + min(3, curr_market["delta_vol"] / thresholds["vol_high"])
+
+            # Spread tightening during the jump suggests healthy liquidity -> beta++
+            if curr_market['delta_spread'] <= -thresholds['spread_thresh'] and curr_market['delta_vol'] >= thresholds["vol_high"]:
                 beta += 1
             # Spread widening during the jump suggests makers pulled liquidity -> alpha++
-            if curr_market['delta_spread'] >= thresholds['spread_high']:
+            elif curr_market['delta_spread'] >= thresholds['spread_thresh']:
                 alpha += 1
-            # Spread tightening during the jump suggests healthy liquidity -> beta++
-            elif curr_market['delta_spread'] <= thresholds['spread_low']:
-                beta += 1
+
 
             print("JUMP",
-                  "Δp", curr_market["delta_price"],
-                  "Δv", curr_market["delta_vol"],
-                  "Δspr", curr_market["delta_spread"],
+                  "ts", curr_market["ts"],
+                  "dp", curr_market["delta_price"],
+                  "dv", curr_market["delta_vol"],
+                  "ds", curr_market["delta_spread"],
                   "alpha", alpha, "beta", beta)
 
             mu = alpha / (alpha + beta)
@@ -116,7 +151,7 @@ def detect():
 
         if mu > 0.7:
             # Check if the price is starting to drop. If so, bet
-            if curr_market['delta_price'] < 0:
+            if curr_market['delta_price'] <= 0:
                 print("fake spike predicted, and spike stalled. buy no shares to bet against it!")
                 date = curr_market['ts']
                 print(date)
