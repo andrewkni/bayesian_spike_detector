@@ -1,3 +1,6 @@
 .idea/
 .venv/
 *.csv
+
+# Exception for the sample data
+!cba_game_sample.csv
