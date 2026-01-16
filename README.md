@@ -57,3 +57,5 @@ python detector.py
 
 ## Good luck!
 Tip: Look for markets with recurring patterns of fake spikes. CBA games are one example...
+
+cba_game_sample.csv contains sample data for backtesting. The market ticker of the sample game is "KXCBAGAME-26JAN15NINSHA-NIN".
